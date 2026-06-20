@@ -5,218 +5,262 @@ import os
 
 pygame.init()
 
-# ----------------- SCREEN -----------------
+# ---------------- SCREEN ----------------
 WIDTH, HEIGHT = 600, 400
-CELL_SIZE = 20
+CELL = 20
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Snake Game - Ultimate Upgrade")
+pygame.display.set_caption("Snake Ultimate Boss Edition")
 
 clock = pygame.time.Clock()
-font = pygame.font.SysFont("Arial", 24)
+font = pygame.font.SysFont("Arial", 22)
 
-# ----------------- COLORS -----------------
-WHITE = (255, 255, 255)
+# ---------------- COLORS ----------------
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-GRAY = (40, 40, 40)
+DARK_GREEN = (0, 180, 0)
+RED = (255, 50, 50)
+GRAY = (80, 80, 80)
 
 BLUE = (0, 150, 255)
 PURPLE = (180, 0, 255)
-YELLOW = (255, 215, 0)
+YELLOW = (255, 220, 0)
 ORANGE = (255, 140, 0)
+DARK_RED = (150, 0, 0)
 
-# ----------------- HIGH SCORE -----------------
-HIGH_SCORE_FILE = "highscore.txt"
+# ---------------- HIGH SCORE ----------------
+FILE = "highscore.txt"
 
-def load_high_score():
-    if os.path.exists(HIGH_SCORE_FILE):
-        with open(HIGH_SCORE_FILE, "r") as f:
-            return int(f.read())
+def load_score():
+    if os.path.exists(FILE):
+        return int(open(FILE).read())
     return 0
 
-def save_high_score(score):
-    with open(HIGH_SCORE_FILE, "w") as f:
-        f.write(str(score))
+def save_score(s):
+    open(FILE, "w").write(str(s))
 
-high_score = load_high_score()
+high_score = load_score()
 
-# ----------------- HELPERS -----------------
-def show_text(text, x, y, color=WHITE):
-    render = font.render(text, True, color)
-    screen.blit(render, (x, y))
+# ---------------- HELPERS ----------------
+def draw_text(text, x, y, c=(255,255,255)):
+    screen.blit(font.render(text, True, c), (x, y))
 
-def draw_grid():
-    for x in range(0, WIDTH, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (x, 0), (x, HEIGHT))
-    for y in range(0, HEIGHT, CELL_SIZE):
-        pygame.draw.line(screen, GRAY, (0, y), (WIDTH, y))
+def rand_food(snake, obs):
+    while True:
+        x = random.randint(0, (WIDTH//CELL)-1)*CELL
+        y = random.randint(0, (HEIGHT//CELL)-1)*CELL
+        if (x,y) not in snake and (x,y) not in obs:
+            return (x,y)
 
-def random_food():
-    x = random.randint(0, (WIDTH - CELL_SIZE) // CELL_SIZE) * CELL_SIZE
-    y = random.randint(0, (HEIGHT - CELL_SIZE) // CELL_SIZE) * CELL_SIZE
-    return (x, y)
+def rand_power():
+    types = ["speed","slow","double","poison"]
+    t = random.choice(types)
+    x = random.randint(0,(WIDTH//CELL)-1)*CELL
+    y = random.randint(0,(HEIGHT//CELL)-1)*CELL
+    return (x,y,t)
 
-def random_powerup():
-    types = ["speed", "slow", "double", "poison"]
-    p_type = random.choice(types)
+def gen_obstacles(level):
+    obs = set()
+    for _ in range(5 + level*2):
+        x = random.randint(0,(WIDTH//CELL)-1)*CELL
+        y = random.randint(0,(HEIGHT//CELL)-1)*CELL
+        obs.add((x,y))
+    return obs
 
-    x = random.randint(0, (WIDTH - CELL_SIZE) // CELL_SIZE) * CELL_SIZE
-    y = random.randint(0, (HEIGHT - CELL_SIZE) // CELL_SIZE) * CELL_SIZE
+# ---------------- BOSS SYSTEM ----------------
+class Boss:
+    def __init__(self):
+        self.x = WIDTH//2
+        self.y = 0
+        self.dir = 1
+        self.hp = 10
 
-    return (x, y, p_type)
+    def move(self):
+        self.x += self.dir * CELL
+        if self.x <= 0 or self.x >= WIDTH-CELL:
+            self.dir *= -1
+            self.y += CELL
 
-# ----------------- GAME CORE -----------------
+    def draw(self):
+        pygame.draw.rect(screen, DARK_RED, (self.x, self.y, CELL*2, CELL*2))
+        draw_text(f"BOSS HP: {self.hp}", 350, 10, RED)
+
+    def collide(self, snake_head):
+        bx = (self.x, self.y)
+        return snake_head == bx or snake_head == (self.x+CELL, self.y)
+
+# ---------------- GAME ----------------
 def game():
     global high_score
 
-    snake = [(100, 100)]
-    direction = (CELL_SIZE, 0)
-
-    food = random_food()
-    powerup = random_powerup()
+    snake = [(100,100)]
+    direction = (CELL,0)
 
     score = 0
+    level = 1
     speed = 10
 
-    active_effect = None
-    effect_timer = 0
+    obstacles = gen_obstacles(level)
+
+    food = rand_food(snake, obstacles)
+    power = rand_power()
+
+    boss = None
+    boss_active = False
+
+    effect = None
+    timer = 0
 
     running = True
     game_over = False
 
     while running:
-        clock.tick(speed)
         screen.fill(BLACK)
-        draw_grid()
+        clock.tick(speed)
 
-        # ----------------- INPUT -----------------
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        # ---------------- INPUT ----------------
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
                 running = False
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and direction != (0, CELL_SIZE):
-                    direction = (0, -CELL_SIZE)
-                elif event.key == pygame.K_DOWN and direction != (0, -CELL_SIZE):
-                    direction = (0, CELL_SIZE)
-                elif event.key == pygame.K_LEFT and direction != (CELL_SIZE, 0):
-                    direction = (-CELL_SIZE, 0)
-                elif event.key == pygame.K_RIGHT and direction != (-CELL_SIZE, 0):
-                    direction = (CELL_SIZE, 0)
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_UP and direction!=(0,CELL):
+                    direction=(0,-CELL)
+                if e.key == pygame.K_DOWN and direction!=(0,-CELL):
+                    direction=(0,CELL)
+                if e.key == pygame.K_LEFT and direction!=(CELL,0):
+                    direction=(-CELL,0)
+                if e.key == pygame.K_RIGHT and direction!=(-CELL,0):
+                    direction=(CELL,0)
 
-                if game_over and event.key == pygame.K_r:
+                if game_over and e.key == pygame.K_r:
                     return game()
 
-        # ----------------- GAME LOGIC -----------------
+        # ---------------- LEVEL SYSTEM ----------------
+        if score > 0 and score % 5 == 0:
+            level += 1
+            obstacles |= gen_obstacles(level)
+            speed = min(20, speed+1)
+
+        # ---------------- BOSS LEVEL ----------------
+        if level % 3 == 0:
+            if boss is None:
+                boss = Boss()
+                boss_active = True
+
+        # ---------------- GAME LOGIC ----------------
         if not game_over:
-            head_x, head_y = snake[0]
-            new_head = (head_x + direction[0], head_y + direction[1])
+            head = snake[0]
+            new_head = (head[0]+direction[0], head[1]+direction[1])
 
-            # wall collision
-            if (new_head[0] < 0 or new_head[0] >= WIDTH or
-                new_head[1] < 0 or new_head[1] >= HEIGHT):
-                game_over = True
+            if (new_head[0]<0 or new_head[0]>=WIDTH or
+                new_head[1]<0 or new_head[1]>=HEIGHT):
+                game_over=True
 
-            # self collision
-            if new_head in snake:
-                game_over = True
+            if new_head in snake or new_head in obstacles:
+                game_over=True
+
+            if boss_active and boss:
+                if boss.collide(new_head):
+                    game_over=True
 
             if not game_over:
-                snake.insert(0, new_head)
+                snake.insert(0,new_head)
 
-                # food
                 if new_head == food:
-                    score += 1
-                    food = random_food()
-                    speed = 10 + score // 3
+                    score+=1
+                    food=rand_food(snake,obstacles)
+
                 else:
                     snake.pop()
 
-                # power-up
-                if new_head[0] == powerup[0] and new_head[1] == powerup[1]:
-                    active_effect = powerup[2]
-                    effect_timer = 60
-                    powerup = random_powerup()
+                # power
+                if new_head == (power[0],power[1]):
+                    effect = power[2]
+                    timer = 50
+                    power = rand_power()
 
-                    if active_effect == "poison":
-                        game_over = True
+                    if effect=="poison":
+                        game_over=True
 
-        # ----------------- EFFECT TIMER -----------------
-        if effect_timer > 0:
-            effect_timer -= 1
+        # ---------------- BOSS MOVEMENT ----------------
+        if boss_active and boss:
+            boss.move()
+            boss.draw()
+
+            if snake[0][0] == boss.x and snake[0][1] == boss.y:
+                boss.hp -= 1
+
+            if boss.hp <= 0:
+                boss_active=False
+                boss=None
+
+        # ---------------- EFFECTS ----------------
+        if timer>0:
+            timer-=1
         else:
-            active_effect = None
+            effect=None
 
-        # apply effects
-        current_speed = speed
+        sp = speed
+        if effect=="speed":
+            sp=18
+        if effect=="slow":
+            sp=6
 
-        if active_effect == "speed":
-            current_speed = 18
-        elif active_effect == "slow":
-            current_speed = 6
+        clock.tick(sp)
 
-        clock.tick(current_speed)
+        # ---------------- DRAW ----------------
+        for o in obstacles:
+            pygame.draw.rect(screen, GRAY, (*o,CELL,CELL))
 
-        # ----------------- DRAW -----------------
-        pygame.draw.rect(screen, RED, (*food, CELL_SIZE, CELL_SIZE))
+        pygame.draw.rect(screen, RED, (*food,CELL,CELL))
 
-        # power-up draw
-        px, py, ptype = powerup
-        color = BLUE if ptype == "speed" else PURPLE if ptype == "slow" else YELLOW if ptype == "double" else ORANGE
-        pygame.draw.rect(screen, color, (px, py, CELL_SIZE, CELL_SIZE))
+        px,py,pt=power
+        c = BLUE if pt=="speed" else PURPLE if pt=="slow" else YELLOW if pt=="double" else ORANGE
+        pygame.draw.rect(screen,c,(px,py,CELL,CELL))
 
-        # snake
-        for i, segment in enumerate(snake):
-            c = GREEN if i == 0 else (0, 180, 0)
-            pygame.draw.rect(screen, c, (*segment, CELL_SIZE, CELL_SIZE))
+        for i,s in enumerate(snake):
+            pygame.draw.rect(screen, GREEN if i==0 else DARK_GREEN, (*s,CELL,CELL))
 
-        # score logic
-        display_score = score * 2 if active_effect == "double" else score
+        draw_text(f"Score: {score}",10,10)
+        draw_text(f"Level: {level}",10,35)
+        draw_text(f"High: {high_score}",10,60)
 
-        show_text(f"Score: {display_score}", 10, 10)
-        show_text(f"High Score: {high_score}", 10, 35)
+        if boss_active:
+            draw_text("BOSS LEVEL!", 250, 10, RED)
 
-        if active_effect:
-            show_text(f"Effect: {active_effect}", 10, 60)
-
-        # ----------------- GAME OVER -----------------
         if game_over:
-            if display_score > high_score:
-                high_score = display_score
-                save_high_score(high_score)
+            if score>high_score:
+                high_score=score
+                save_score(high_score)
 
-            show_text("GAME OVER", WIDTH//2 - 80, HEIGHT//2 - 30, RED)
-            show_text("Press R to Restart", WIDTH//2 - 120, HEIGHT//2)
+            draw_text("GAME OVER",220,180,RED)
+            draw_text("Press R",240,210,RED)
 
         pygame.display.update()
 
     pygame.quit()
 
-# ----------------- START SCREEN -----------------
-def start_screen():
-    waiting = True
-
-    while waiting:
+# ---------------- START ----------------
+def start():
+    run=True
+    while run:
         screen.fill(BLACK)
-        show_text("SNAKE GAME ULTIMATE", WIDTH//2 - 140, HEIGHT//2 - 60)
-        show_text("Press SPACE to Start", WIDTH//2 - 130, HEIGHT//2)
-        show_text("Arrow Keys to Move", WIDTH//2 - 120, HEIGHT//2 + 40)
+        draw_text("SNAKE ULTIMATE ARCADE",160,150)
+        draw_text("SPACE TO START",200,190)
+        draw_text("BOSS LEVELS ENABLED",180,220,RED)
 
         pygame.display.update()
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                waiting = False
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
+        for e in pygame.event.get():
+            if e.type==pygame.QUIT:
+                run=False
+            if e.type==pygame.KEYDOWN:
+                if e.key==pygame.K_SPACE:
                     game()
-                if event.key == pygame.K_ESCAPE:
-                    waiting = False
+                if e.key==pygame.K_ESCAPE:
+                    run=False
 
     pygame.quit()
 
-# ----------------- RUN -----------------
-start_screen()
+start()
